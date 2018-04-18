@@ -15,7 +15,7 @@ contract MultiSignatures {
 		@dev Define access list based on signed arguments
 		      keccak(nreq..fee)               
 		@param nreq, number of signature for approval
-		@param fee, operation fee (without gas*gasprice)
+		@param fee, fee based gasLimit (without gas*gasprice)
 		@param v, v part of web3 "personalSignature"
 		@param r, r part of web3 "personalSignature"
 		@param s, s part of web3 "personalSignature"
@@ -33,5 +33,6 @@ contract MultiSignatures {
 		}
 	}
 	// Register addresses
-	// Spend
+	// Spend emit event success or failure
+	// Suicide
 }
