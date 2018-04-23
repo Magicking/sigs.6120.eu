@@ -11,8 +11,7 @@ contract MultiSignatures {
 	mapping(address => bool) public Allowed;
 	mapping(address => uint) public OperatorsBalance;
 
-	uint fee;
-	uint feeBalance;
+	event FundReceived(address from, uint amount);
 
 	uint public Nonce;
 
@@ -40,6 +39,14 @@ contract MultiSignatures {
 		}
 		Owners = v.length;
 		Threshold = nreq;
+		// calculate fee
+	}
+
+	/*
+		@dev Fallback catch all the funds
+	*/
+	fallback() public payable {
+		emit FundReceived(msg.sender, msg.value);
 	}
 
 	/*
@@ -51,7 +58,8 @@ contract MultiSignatures {
 		@param r, r part of web3 "personalSignature"
 		@param s, s part of web3 "personalSignature"
 	*/
-	function VerifySet(bytes32 signedHash, bool set, address who, uint8[] v, bytes32[] r, bytes32[] s) public view returns (bool) {
+	// TODO Factorize
+	function VerifySet(bool set, address who, uint8[] v, bytes32[] r, bytes32[] s) public view returns (bool) {
 		bytes memory prefix = "\x19Ethereum Signed Message:\n21";
 		byte operation = set ? 0x1 : 0x0; // TODO use bool directly ?
 		bytes32 prefixedHash = keccak256(abi.encodePacked(prefix, operation, who));
@@ -67,8 +75,29 @@ contract MultiSignatures {
 		return false;
 	}
 
-	// Set addresses
-	// Fallback
+	/*
+		@dev Add or remove address controller to this multisignature contract
+		@param set, if true, operation is setting address,
+			otherwise is a removing operation
+		@param who, the address to set/unset in this contract
+		@param v, v part of web3 "personalSignature"
+		@param r, r part of web3 "personalSignature"
+		@param s, s part of web3 "personalSignature"
+	*/
+	function SetAddress(bool set, address who, uint8[] v, bytes32[] r, bytes32[] s) public {
+		require(VerifySet(set, who, v, r, s));
+		if (set && !Allowed[who]) {
+			Allowed[who] = true;
+			Owners++;
+		}
+		if (!set && Allowed[who]) {
+			require(Owners > 1, "At least one owner is required");
+			delete Allowed[who];
+			Owners--;
+		}
+		// Calculate fee for sender
+	}
+
 	// Spend emit event success or failure
 	// Suicide
 }
