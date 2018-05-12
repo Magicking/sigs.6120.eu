@@ -2,6 +2,8 @@ pragma solidity ^0.4.22;
 
 import "./SafeMath.sol";
 
+uint constant public FREE_POINTER = 0x40; //
+
 contract MultiSignatures {
 
 	using SafeMath for uint;
@@ -76,7 +78,7 @@ contract MultiSignatures {
 	}
 
 	/*
-		@dev Add or remove address controller to this multisignature contract
+		@dev SetAddress add or remove address controller to this multisignature contract
 		@param set, if true, operation is setting address,
 			otherwise is a removing operation
 		@param who, the address to set/unset in this contract
@@ -99,5 +101,26 @@ contract MultiSignatures {
 	}
 
 	// Spend emit event success or failure
+	function execute(address destination, uint value, uint dataLength, bytes data) private returns (bool) {
+		bool result;
+		assembly {
+			let output := mload(FREE_POINTER)   // "Allocate" memory for output (0x40 is where "free memory" pointer is stored by convention)
+			let dataLength := add(data, 32) // First 32 bytes are the padded length of data, so exclude that
+			result := call(
+				sub(gas, 34710),   // 34710 is the value that solidity is currently emitting
+		// Gcall(700) + Gcallvalue(9000) + Gnewaccount(25000)
+				   // It includes callGas (700) + callVeryLow (3, to pay for SUB) + callValueTransferGas (9000) +
+				   // callNewAccountGas (25000, in case the destination address does not exist and needs creating)
+				destination,
+				value,
+				d,
+				dataLength,        // Size of the input (in bytes) - this is what fixes the padding problem
+				x,
+				0                  // Output is ignored, therefore the output size is zero
+			)
+		}
+		return result;
+	}
+		// Gas cost
 	// Suicide
 }
