@@ -1,16 +1,14 @@
 pragma solidity ^0.4.22;
 
-import "./SafeMath.sol";
+import 'zeppelin-solidity/contracts/access/SignatureBouncer.sol';
+import 'zeppelin-solidity/contracts/math/SafeMath.sol';
 
 uint constant public FREE_POINTER = 0x40; //
 
-contract MultiSignatures {
+contract MultiSignatures is SignatureBouncer {
 
 	using SafeMath for uint;
 
-	uint public Owners;
-	uint public Threshold;
-	mapping(address => bool) public Allowed;
 	mapping(address => uint) public OperatorsBalance;
 
 	event FundReceived(address from, uint amount);
@@ -26,21 +24,15 @@ contract MultiSignatures {
 		@param r, r part of web3 "personalSignature"
 		@param s, s part of web3 "personalSignature"
 	*/
-	constructor(uint nreq, uint fee
-						 uint8[] v, bytes32[] r, bytes32[] s) public {
-		require(v.length == r.length &&
-				v.length == s.length &&
-				v.length > 0);
-		require(nreq <= v.length);
-		bytes memory prefix = "\x19Ethereum Signed Message:\n64";
-		bytes32 prefixedHash = keccak256(abi.encodePacked(prefix, nreq, fee));
-		for (uint i = 0; i < v.length; i++) {
-			address addr = ecrecover(prefixedHash, v[i], r[i], s[i]);
-			require(addr != 0x0);
-			Allowed[addr] = true;
-		}
-		Owners = v.length;
+	constructor(uint nreq, uint fee, bytes salt,
+						 bytes[] sigs) public {
+		require(nreq > 0);
+		require(nreq <= owners.length);
 		Threshold = nreq;
+		// construct hash with nreq, fee and salt
+		// for each .toEthSignedMessageHash
+			// recover
+			// set addresses
 		// calculate fee
 	}
 
