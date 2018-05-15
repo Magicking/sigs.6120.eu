@@ -3,41 +3,64 @@ pragma solidity ^0.4.22;
 import 'zeppelin-solidity/contracts/access/SignatureBouncer.sol';
 import 'zeppelin-solidity/contracts/math/SafeMath.sol';
 
-uint constant public FREE_POINTER = 0x40; //
+uint256 constant public FREE_POINTER = 0x40; //
 
 contract MultiSignatures is SignatureBouncer {
 
-	using SafeMath for uint;
+	using SafeMath for uint256;
 
-	mapping(address => uint) public OperatorsBalance;
+	enum Operation { OP_CALL, OP_ADD, OP_DEL };
 
-	event FundReceived(address from, uint amount);
+	mapping(address => uint256) public OperatorsBalance;
 
-	uint public Nonce;
+	event FundReceived(address from, uint256 amount);
+
+	uint256 public Nonce;
+	uint256 public Fee;
+	uint256 private withdrawBalance;
+	uint256 public Threshold;
 
 	/*
 		@dev Define access list based on signed arguments
 		      keccak(nreq..fee)               
 		@param nreq, number of signature for approval
 		@param fee, fee based gasLimit (without gas*gasprice) paid to operator
-		@param v, v part of web3 "personalSignature"
-		@param r, r part of web3 "personalSignature"
-		@param s, s part of web3 "personalSignature"
+		@param owners, authorized signers
 	*/
-	constructor(uint nreq, uint fee, bytes salt,
-						 bytes[] sigs) public {
+	constructor(uint256 nreq, uint256 fee,
+						 address[] owners) public {
+		uint256 gasInitial = gasleft();
 		require(nreq > 0);
 		require(nreq <= owners.length);
 		Threshold = nreq;
-		// construct hash with nreq, fee and salt
-		// for each .toEthSignedMessageHash
-			// recover
-			// set addresses
+		Fee = fee;
+		for (uint256 i = 0; i < owners.length; i++) {
+			addBouncer(owners[i]);
+		}
 		// calculate fee
+		assignGasCost(gasInitial);
 	}
 
 	/*
-		@dev Fallback catch all the funds
+		@dev Return spending balance
+	*/
+	function balance() public view returns (uint256) {
+		return this.balance.sub(withdrawBalance);
+	}
+
+	/*
+		@dev Assign transaction cost
+		@param gasInitial, initial gasleft
+	*/
+	function assignGasCost(uint256 gasInitial) private {
+		uint256 memory cost = (gasInit-gasleft())*tx.gasprice;
+		// TODO add gas cost of the two following lines
+		OperatorsBalance[msg.sender] = OperatorsBalance[msg.sender].add(cost);
+		withdrawBalance = withdrawBalance.add(cost);
+	}
+
+	/*
+		@dev fallback catch all the funds
 	*/
 	fallback() public payable {
 		emit FundReceived(msg.sender, msg.value);
@@ -45,27 +68,28 @@ contract MultiSignatures is SignatureBouncer {
 
 	/*
 		@dev Verify operation for setting/unsetting address
-		@param set, if true, operation is setting address,
-			otherwise is a removing operation
-		@param who, the address to set/unset in this contract
-		@param v, v part of web3 "personalSignature"
-		@param r, r part of web3 "personalSignature"
-		@param s, s part of web3 "personalSignature"
+		@param data:
+			   0 ->  32 length field
+			op, Send / Add / Del operation
+			  32 ->  64 operation number (0: SEND, 1: ADD, 2: DEL)
+			  64 ->  96 address
+			Send:
+			  96 -> 128 value
+			 128 -> 160 data TODO
+		@param sig, signature of web3 "personalSignature" function
 	*/
-	// TODO Factorize
-	function VerifySet(bool set, address who, uint8[] v, bytes32[] r, bytes32[] s) public view returns (bool) {
+	function Vote(Operation op, bytes data, bytes[] sigs) public view returns (bool) {
 		bytes memory prefix = "\x19Ethereum Signed Message:\n21";
-		byte operation = set ? 0x1 : 0x0; // TODO use bool directly ?
-		bytes32 prefixedHash = keccak256(abi.encodePacked(prefix, operation, who));
-		uint count = 0;
-		for (uint i = 0; i < v.length; i++) {
-			address addr = ecrecover(prefixedHash, v[i], r[i], s[i]);
+		bytes32 prefixedHash = keccak256(abi.encodePacked(prefix, uint256(op), who));
+		uint256 count = 0;/*
+		for (uint256 i = 0; i < sigs.length; i++) {
+			address addr = prefixedHash.recover(sigs[i]);
 			if (Allowed[addr]) {
 				count++;
-			}
+			}                           TODO
 			if (count == Threshold)
 				return true;
-		}
+		}*/
 		return false;
 	}
 
@@ -78,7 +102,7 @@ contract MultiSignatures is SignatureBouncer {
 		@param r, r part of web3 "personalSignature"
 		@param s, s part of web3 "personalSignature"
 	*/
-	function SetAddress(bool set, address who, uint8[] v, bytes32[] r, bytes32[] s) public {
+	function SetAddress(bool set, address who, uint2568[] v, bytes32[] r, bytes32[] s) public {
 		require(VerifySet(set, who, v, r, s));
 		if (set && !Allowed[who]) {
 			Allowed[who] = true;
@@ -93,7 +117,7 @@ contract MultiSignatures is SignatureBouncer {
 	}
 
 	// Spend emit event success or failure
-	function execute(address destination, uint value, uint dataLength, bytes data) private returns (bool) {
+	function execute(address destination, uint256 value, uint256 dataLength, bytes data) private returns (bool) {
 		bool result;
 		assembly {
 			let output := mload(FREE_POINTER)   // "Allocate" memory for output (0x40 is where "free memory" pointer is stored by convention)
